@@ -24,6 +24,7 @@ import android.widget.Toast;
 
 import com.reindeercrafts.notificationpeek.blacklist.BlackListActivity;
 import com.reindeercrafts.notificationpeek.dialogs.DialogHelper;
+import com.reindeercrafts.notificationpeek.peek.NotificationHelper;
 import com.reindeercrafts.notificationpeek.settings.Settings;
 import com.reindeercrafts.notificationpeek.utils.AccessChecker;
 import com.reindeercrafts.notificationpeek.utils.SensorHelper;
@@ -76,7 +77,7 @@ public class MainActivity extends Activity implements View.OnClickListener {
             isAccessEnabled = false;
         }
 
-        if (!isAccessEnabled) {
+        if (!isAccessEnabled || NotificationHelper.isPeekDisabled(this)) {
             SpannableString spannableString =
                     new SpannableString(getString(R.string.instruction_start));
             spannableString.setSpan(
@@ -139,7 +140,7 @@ public class MainActivity extends Activity implements View.OnClickListener {
         final Notification.Builder builder = new Notification.Builder(this);
         builder.setSmallIcon(R.drawable.ic_launcher)
                 .setTicker(getString(R.string.diagnosis_notification_title))
-                .setContentTitle(getString(R.string.diagnosis_notification_title))
+                .setContentTitle(getString(R.string.diagnosis_notification_title_content))
                 .setContentText(getString(R.string.diagnosis_notification_content))
                 .setLights(Color.GREEN, 1000, 5000)
                 .setAutoCancel(true)

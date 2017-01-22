@@ -1,6 +1,7 @@
 package com.reindeercrafts.notificationpeek.peek;
 
 import android.app.Activity;
+import android.app.PendingIntent;
 import android.app.admin.DevicePolicyManager;
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -13,6 +14,8 @@ import android.service.notification.StatusBarNotification;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
+import android.view.animation.AccelerateInterpolator;
+import android.view.animation.DecelerateInterpolator;
 import android.widget.GridLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
@@ -42,8 +45,11 @@ public class NotificationPeekActivity extends Activity {
     private NotificationPeekReceiver mReceiver;
 
     private RelativeLayout mPeekView;
+    private NotificationLayout mNotificationLayout;
     private GridLayout mNotificationsContainer;
-    private View mNotificationView;
+    private ViewGroup mNotificationView;
+    private ImageView mNotificationIcon;
+    private TextView mNotificationText;
 
     private NotificationPeek mPeek;
 
@@ -62,10 +68,10 @@ public class NotificationPeekActivity extends Activity {
 
         super.onCreate(savedInstanceState);
 
-        mPeekView = NotificationPeek.sPeekView;
-        mNotificationsContainer =
-                (GridLayout) mPeekView.findViewById(NotificationPeek.NOTIFICATION_CONTAINER_ID);
-        mNotificationView = mPeekView.findViewById(NotificationPeek.NOTIFICATION_VIEW_ID);
+        mPeekView = NotificationPeek.getPeekView();
+
+        mNotificationsContainer = (GridLayout) mPeekView.findViewById(R.id.notification_container);
+        mNotificationView = (ViewGroup) mPeekView.findViewById(R.id.notification_view);
 
         setContentView(mPeekView);
 
@@ -74,7 +80,7 @@ public class NotificationPeekActivity extends Activity {
 
         if (showClock) {
             mClockTextView = (TextView) PeekLayoutFactory
-                    .createPeekLayout(this, PeekLayoutFactory.LAYOUT_TYPE_CLOCK);
+                    .createPeekLayout(this, PeekLayoutFactory.LAYOUT_TYPE_CLOCK, null);
             mPeekView.addView(mClockTextView);
             mClockTextView.setText(getCurrentTimeText());
         }
@@ -89,9 +95,15 @@ public class NotificationPeekActivity extends Activity {
         initReceiver();
 
         // Retrieve NotificationPeek object.
-        NotificationLayout notificationView = (NotificationLayout) mPeekView
-                .findViewById(NotificationPeek.NOTIFICATION_LAYOUT_ID);
-        mPeek = notificationView.getNotificationPeek();
+        mNotificationLayout = (NotificationLayout) mPeekView.findViewById(R.id.notification_layout);
+        mPeek = mNotificationLayout.getNotificationPeek();
+
+        // Setup OnClickListener.
+        mNotificationIcon = (ImageView) mPeekView.findViewById(R.id.notification_icon);
+
+        // Notification snippet TextView.
+        mNotificationText = (TextView) mPeekView.findViewById(R.id.notification_text);
+
     }
 
     private void initReceiver() {
@@ -101,6 +113,8 @@ public class NotificationPeekActivity extends Activity {
         filter.addAction(NotificationPeekReceiver.ACTION_FINISH_PEEK);
         filter.addAction(NotificationPeekReceiver.ACTION_DIMISS_NOTIFICATION);
         filter.addAction(NotificationPeekReceiver.ACTION_UPDATE_NOTIFICATION_ICONS);
+        filter.addAction(NotificationPeekReceiver.ACTION_SHOW_CONTENT);
+        filter.addAction(NotificationPeekReceiver.ACTION_HIDE_CONTENT);
         // Add time tick intent only when the clock is shown.
         if (mClockTextView != null) {
             filter.addAction(Intent.ACTION_TIME_TICK);
@@ -147,12 +161,6 @@ public class NotificationPeekActivity extends Activity {
      */
     private boolean updateNotification(String description) {
 
-        ImageView notificationIcon =
-                (ImageView) mPeekView.findViewById(NotificationPeek.NOTIFICATION_ICON_ID);
-        TextView notificationTextView =
-                (TextView) mPeekView.findViewById(NotificationPeek.NOTIFICATION_TEXT_ID);
-
-
         int currentNotificationIdex =
                 getCurrentNotificationIndex(mNotificationsContainer, description);
 
@@ -167,15 +175,15 @@ public class NotificationPeekActivity extends Activity {
                     .getChildAt(nextNotificationIndex).getTag();
 
             if (nextNotification.getNotification().largeIcon != null) {
-                notificationIcon.setImageDrawable(NotificationPeekViewUtils
-                        .getRoundedShape(notificationIcon,
+                mNotificationIcon.setImageDrawable(NotificationPeekViewUtils
+                        .getRoundedShape(getResources(),
                                 nextNotification.getNotification().largeIcon));
             } else {
-                notificationIcon.setImageDrawable(
+                mNotificationIcon.setImageDrawable(
                         NotificationPeekViewUtils.getIconFromResource(this, nextNotification));
             }
 
-            notificationTextView.setText(
+            mNotificationText.setText(
                     NotificationPeekViewUtils.getNotificationDisplayText(this, nextNotification));
 
             // Animate back icon and text.
@@ -184,11 +192,15 @@ public class NotificationPeekActivity extends Activity {
 
             // Set new tag.
             mNotificationView.setTag(nextNotification);
+            mPeek.getNotificationHub().setCurrentNotification(nextNotification);
 
-            if (nextNotification.getNotification().contentIntent != null) {
-                final View.OnClickListener listener =
-                        new NotificationClicker(nextNotification, mPeek);
-                notificationIcon.setOnClickListener(listener);
+            final PendingIntent contentIntent = nextNotification.getNotification().contentIntent;
+            if (contentIntent != null) {
+                NotificationClicker mNotificationClicker =
+                        new NotificationClicker(this, contentIntent, mPeek);
+                mNotificationIcon.setOnClickListener(mNotificationClicker);
+            } else {
+                mNotificationIcon.setOnClickListener(null);
             }
 
             if (nextNotificationIndex == 0) {
@@ -304,6 +316,30 @@ public class NotificationPeekActivity extends Activity {
     }
 
     /**
+     * Animate the small TextView below the icon and the clock TextView and hide them when
+     * the notification content is displayed.
+     */
+    private void hidePeekComponents() {
+        mNotificationText.animate().alpha(0f).setInterpolator(new DecelerateInterpolator()).start();
+        if (mClockTextView != null) {
+            mClockTextView.animate().alpha(0f).setInterpolator(new DecelerateInterpolator())
+                    .start();
+        }
+    }
+
+    /**
+     * Bring the small TextView and the clock TextView back when the notification content
+     * is removed.
+     */
+    private void showPeekComponents() {
+        mNotificationText.animate().alpha(1f).setInterpolator(new AccelerateInterpolator()).start();
+        if (mClockTextView != null) {
+            mClockTextView.animate().alpha(1f).setInterpolator(new AccelerateInterpolator())
+                    .start();
+        }
+    }
+
+    /**
      * Release partial wake lock from NotificationPeek object and
      * lock screen.
      */
@@ -340,6 +376,10 @@ public class NotificationPeekActivity extends Activity {
         // Action for finishing this activity.
         public static final String ACTION_FINISH_PEEK = "NotificationPeek.finish_peek";
 
+        public static final String ACTION_SHOW_CONTENT = "NotificationPeek.show_content";
+
+        public static final String ACTION_HIDE_CONTENT = "NotificationPeek.hide_content";
+
         public static final String EXTRA_NOTIFICATION_DESCRIPTION =
                 "NotificationPeek.extra_status_bar_notification_description";
 
@@ -356,7 +396,14 @@ public class NotificationPeekActivity extends Activity {
             } else if (intent.getAction().equals(Intent.ACTION_TIME_TICK)) {
                 mClockTextView.setText(getCurrentTimeText());
             } else if (intent.getAction().equals(ACTION_UPDATE_NOTIFICATION_ICONS)) {
+                // Update notification icons according to actions.
                 updateNotificationIcons();
+            } else if (intent.getAction().equals(ACTION_SHOW_CONTENT)) {
+                // Display current notification's content.
+                hidePeekComponents();
+            } else if (intent.getAction().equals(ACTION_HIDE_CONTENT)) {
+                // Hide notification content view.
+                showPeekComponents();
             }
         }
     }

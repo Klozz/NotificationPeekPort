@@ -58,11 +58,6 @@ public class NotificationPeek implements SensorActivityHandler.SensorChangedCall
     private final static String TAG = "NotificationPeek";
     public final static boolean DEBUG = true;
 
-    public static final int NOTIFICATION_LAYOUT_ID = 1;
-    public static final int NOTIFICATION_VIEW_ID = 2;
-    public static final int NOTIFICATION_ICON_ID = 3;
-    public static final int NOTIFICATION_TEXT_ID = 4;
-    public static final int NOTIFICATION_CONTAINER_ID = 5;
     public static final float ICON_LOW_OPACITY = 0.3f;
 
     private static final int NOTIFICATION_PEEK_TIME = 5000; // 5 secs
@@ -86,7 +81,7 @@ public class NotificationPeek implements SensorActivityHandler.SensorChangedCall
     private Handler mWakeLockHandler;
     private Handler mHandler;
 
-    static RelativeLayout sPeekView;
+    private static RelativeLayout sPeekView;
 
     private List<StatusBarNotification> mShownNotifications =
             new ArrayList<StatusBarNotification>();
@@ -103,7 +98,7 @@ public class NotificationPeek implements SensorActivityHandler.SensorChangedCall
     private boolean mEnabled = true;
     private boolean mAnimating;
 
-    private boolean mEventsRegistered = false;
+    private boolean mEventsRegistered;
 
     private NotificationHub mNotificationHub;
 
@@ -122,7 +117,7 @@ public class NotificationPeek implements SensorActivityHandler.SensorChangedCall
         mNotificationHub = notificationHub;
         mContext = context;
 
-        mNotificationHelper = new NotificationHelper(context, this);
+        mNotificationHelper = new NotificationHelper(context);
         mWallpaperFactory = new WallpaperFactory(context);
 
         mSensorHandler = new SensorActivityHandler(context, this);
@@ -211,7 +206,7 @@ public class NotificationPeek implements SensorActivityHandler.SensorChangedCall
         NotificationLayout rootView = new NotificationLayout(context);
         rootView.setOrientation(LinearLayout.VERTICAL);
         rootView.setNotificationPeek(NotificationPeek.this);
-        rootView.setId(NOTIFICATION_LAYOUT_ID);
+        rootView.setId(R.id.notification_layout);
         sPeekView.addView(rootView);
 
         RelativeLayout.LayoutParams rootLayoutParams =
@@ -224,19 +219,19 @@ public class NotificationPeek implements SensorActivityHandler.SensorChangedCall
         // notification container
         mNotificationView = new LinearLayout(context);
         mNotificationView.setOrientation(LinearLayout.VERTICAL);
-        mNotificationView.setId(NOTIFICATION_VIEW_ID);
+        mNotificationView.setId(R.id.notification_view);
         rootView.addView(mNotificationView);
 
         // current notification icon
         mNotificationIcon = new ImageView(context);
-        mNotificationIcon.setId(NOTIFICATION_ICON_ID);
+        mNotificationIcon.setId(R.id.notification_icon);
         mNotificationIcon.setScaleType(ImageView.ScaleType.CENTER_CROP);
         mNotificationIcon
                 .setOnTouchListener(NotificationHelper.getHighlightTouchListener(Color.DKGRAY));
 
         // current notification text
         mNotificationText = new TextView(context);
-        mNotificationText.setId(NOTIFICATION_TEXT_ID);
+        mNotificationText.setId(R.id.notification_text);
         Typeface typeface = Typeface.create("sans-serif-condensed", Typeface.NORMAL);
         mNotificationText.setTypeface(typeface);
         mNotificationText.setGravity(Gravity.CENTER);
@@ -281,9 +276,9 @@ public class NotificationPeek implements SensorActivityHandler.SensorChangedCall
                 return true;
             }
         };
-        mNotificationsContainer.setId(NOTIFICATION_CONTAINER_ID);
+        mNotificationsContainer.setId(R.id.notification_container);
         mNotificationsContainer.setColumnCount(COL_NUM);
-        mNotificationsContainer.setOrientation(LinearLayout.HORIZONTAL);
+        mNotificationsContainer.setOrientation(GridLayout.HORIZONTAL);
         mNotificationsContainer.setPadding(0,
                 mContext.getResources().getDimensionPixelSize(R.dimen.item_padding) * 2, 0, 0);
         LayoutTransition transitioner = new LayoutTransition();
@@ -304,6 +299,10 @@ public class NotificationPeek implements SensorActivityHandler.SensorChangedCall
         mNotificationsContainer.setLayoutParams(notificationsLayoutParams);
 
         updateBackgroundImageView();
+    }
+
+    public static RelativeLayout getPeekView() {
+        return sPeekView;
     }
 
     public void updateNotificationTextAlpha(float alpha) {
@@ -532,7 +531,7 @@ public class NotificationPeek implements SensorActivityHandler.SensorChangedCall
         updateNotificationIcons();
     }
 
-    public void updateNotificationIcons() {
+    private void updateNotificationIcons() {
         mNotificationsContainer.removeAllViews();
         int iconSize =
                 mContext.getResources().getDimensionPixelSize(R.dimen.small_notification_icon_size);
@@ -594,18 +593,20 @@ public class NotificationPeek implements SensorActivityHandler.SensorChangedCall
             Bitmap b = n.getNotification().largeIcon;
             if (b != null) {
                 mNotificationIcon.setImageDrawable(
-                        NotificationPeekViewUtils.getRoundedShape(mNotificationIcon, b));
+                        NotificationPeekViewUtils.getRoundedShape(mContext.getResources(), b));
             } else {
                 mNotificationIcon.setImageDrawable(
                         NotificationPeekViewUtils.getIconFromResource(mContext, n));
             }
+
             final PendingIntent contentIntent = n.getNotification().contentIntent;
             if (contentIntent != null) {
-                final View.OnClickListener listener = new NotificationClicker(n, this);
-                mNotificationIcon.setOnClickListener(listener);
+                mNotificationIcon
+                        .setOnClickListener(new NotificationClicker(mContext, contentIntent, this));
             } else {
                 mNotificationIcon.setOnClickListener(null);
             }
+
             mNotificationText
                     .setText(NotificationPeekViewUtils.getNotificationDisplayText(mContext, n));
             mNotificationText.setVisibility(isKeyguardSecureShowing() ? View.GONE : View.VISIBLE);
@@ -674,6 +675,14 @@ public class NotificationPeek implements SensorActivityHandler.SensorChangedCall
         sPeekView = null;
     }
 
+    public void unregisterEventListeners() {
+        if (mEventsRegistered) {
+            mSensorHandler.unregisterEventListeners();
+            mEventsRegistered = false;
+        }
+
+    }
+
     @Override
     public void onPocketModeChanged(boolean inPocket) {
         // If we set to use always listening, if we detect the device is out of pocket,
@@ -706,7 +715,7 @@ public class NotificationPeek implements SensorActivityHandler.SensorChangedCall
     }
 
     @Override
-    public void onScreenStateChaged(boolean screenOn) {
+    public void onScreenStateChanged(boolean screenOn) {
         if (!screenOn) {
             mHandler.removeCallbacksAndMessages(null);
             dismissNotification();
@@ -740,6 +749,8 @@ public class NotificationPeek implements SensorActivityHandler.SensorChangedCall
     /* Called after click event is triggered, used to clean up event listeners and
      * set mNextNotification to null. */
     public void onPostClick() {
+        dismissNotification();
+        removeNotification((StatusBarNotification) mNotificationView.getTag());
         mSensorHandler.unregisterEventListeners();
         mNextNotification = null;
     }

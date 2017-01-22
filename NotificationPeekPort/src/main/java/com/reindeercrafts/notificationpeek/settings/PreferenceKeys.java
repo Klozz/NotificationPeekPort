@@ -20,10 +20,17 @@ public class PreferenceKeys {
     public static final String PREF_GYRO_SENSOR = "gyro_sensor";
     public static final String PREF_PROX_LIGHT_SENSOR = "prox_light_sensor";
     public static final String PREF_ALWAYS_SHOW_CONTENT = "always_show_content";
+    public static final String PREF_SYSTEM_APP = "show_system_app";
+
 
     // Appearance settings preference keys.
     public static final String PREF_APPEARANCE = "appearance";
     public static final String PREF_BACKGROUND = "background";
     public static final String PREF_RADIUS = "radius";
     public static final String PREF_DIM = "dim";
+
+    // Black list preference keys.
+    public static final String PREF_DISABLE_PEEK = "disable_peek";
+    public static final String PREF_QUIET_HOUR = "quiet_hour";
+    public static final String PREF_QUIET_HOUR_DEF = "NA";
 }

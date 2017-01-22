@@ -9,7 +9,6 @@ import android.content.SharedPreferences;
 import android.preference.PreferenceManager;
 import android.service.notification.NotificationListenerService;
 import android.service.notification.StatusBarNotification;
-import android.util.Log;
 
 import com.reindeercrafts.notificationpeek.blacklist.AppList;
 import com.reindeercrafts.notificationpeek.peek.NotificationPeek;
@@ -34,6 +33,9 @@ public class NotificationService extends NotificationListenerService {
 
     public static final String ACTION_PREFERENCE_CHANGED =
             NotificationService.class.getSimpleName() + ".preference_changed";
+
+    public static final String ACTION_QUIET_HOUR_CHANGE =
+            NotificationService.class.getSimpleName() + ".quiet_hour_changed";
 
 
     public static final String EXTRA_PACKAGE_NAME = "PackageName";
@@ -78,14 +80,17 @@ public class NotificationService extends NotificationListenerService {
     @Override
     public void onNotificationPosted(StatusBarNotification sbn) {
 
-        Log.i(TAG, sbn.getPackageName() + " Notification received:" +
-                sbn.getNotification().tickerText);
-
         Notification postedNotification = sbn.getNotification();
 
         if (postedNotification.tickerText == null ||
                 sbn.isOngoing() || !sbn.isClearable() ||
                 isInBlackList(sbn)) {
+            return;
+        }
+
+        if (mAppList.isInQuietHour(sbn.getPostTime())) {
+            // The first notification arrived during quiet hour will unregister all sensor listeners.
+            mNotificationPeek.unregisterEventListeners();
             return;
         }
 
@@ -123,7 +128,7 @@ public class NotificationService extends NotificationListenerService {
     private boolean isInBlackList(StatusBarNotification notification) {
 
         return notification.getNotification().priority < Notification.PRIORITY_DEFAULT ||
-                mAppList.isInBlackList(notification.getPackageName());
+                mAppList.shouldPeekWakeUp(notification);
 
     }
 
@@ -132,6 +137,7 @@ public class NotificationService extends NotificationListenerService {
         IntentFilter intentFilter = new IntentFilter();
         intentFilter.addAction(ACTION_DISMISS_NOTIFICATION);
         intentFilter.addAction(ACTION_PREFERENCE_CHANGED);
+        intentFilter.addAction(ACTION_QUIET_HOUR_CHANGE);
 
         // Receive wallpaper change action to inform NotificationPeek to update background.
         intentFilter.addAction(Intent.ACTION_WALLPAPER_CHANGED);
@@ -139,6 +145,7 @@ public class NotificationService extends NotificationListenerService {
     }
 
     public class NotificationActionReceiver extends BroadcastReceiver {
+
 
         @Override
         public void onReceive(Context context, Intent intent) {
@@ -165,7 +172,11 @@ public class NotificationService extends NotificationListenerService {
                     mNotificationPeek.updateBackgroundImageView();
                 }
             } else if (action.equals(Intent.ACTION_WALLPAPER_CHANGED)) {
+                // Wallpaper has been changed, update Peek.
                 mNotificationPeek.updateBackgroundImageView();
+            } else if (action.equals(ACTION_QUIET_HOUR_CHANGE)) {
+                // Quiet hour has been changed, update AppList settings.
+                mAppList.updateQuietHour();
             }
         }
     }

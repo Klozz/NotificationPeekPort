@@ -1,18 +1,23 @@
 package com.reindeercrafts.notificationpeek.blacklist;
 
 import android.app.ActionBar;
-import android.app.Activity;
 import android.app.FragmentTransaction;
+import android.content.SharedPreferences;
 import android.os.Bundle;
+import android.preference.PreferenceManager;
+import android.support.v4.app.FragmentActivity;
 import android.text.Editable;
 import android.text.TextWatcher;
 import android.view.MenuItem;
 import android.view.View;
+import android.widget.CheckBox;
+import android.widget.CompoundButton;
 import android.widget.EditText;
 
 import com.reindeercrafts.notificationpeek.R;
 import com.reindeercrafts.notificationpeek.blacklist.fragments.BlackListFragment;
 import com.reindeercrafts.notificationpeek.blacklist.fragments.BlackListSuggestionFragment;
+import com.reindeercrafts.notificationpeek.settings.PreferenceKeys;
 
 /**
  * Black list main activity with an EditText to search by app name and a list to display
@@ -20,11 +25,12 @@ import com.reindeercrafts.notificationpeek.blacklist.fragments.BlackListSuggesti
  *
  * Created by zhelu on 5/21/14.
  */
-public class BlackListActivity extends Activity
+public class BlackListActivity extends FragmentActivity
         implements TextWatcher, BlackListSuggestionFragment.SuggestionCallback,
-        View.OnFocusChangeListener {
+        View.OnFocusChangeListener, CompoundButton.OnCheckedChangeListener {
 
     private EditText mSearchEditText;
+    private CheckBox mSystemAppCheckBox;
 
     private BlackListFragment mBlackListFragment;
 
@@ -41,6 +47,10 @@ public class BlackListActivity extends Activity
 
         mSearchEditText = (EditText) findViewById(R.id.search_edit_text);
         mSearchEditText.setOnFocusChangeListener(this);
+
+        mSystemAppCheckBox = (CheckBox) findViewById(R.id.show_system_app_check);
+        mSystemAppCheckBox.setChecked(AppList.shouldExcludeSystemApps(this));
+        mSystemAppCheckBox.setOnCheckedChangeListener(this);
 
         initActionBar();
         initFragments();
@@ -150,10 +160,19 @@ public class BlackListActivity extends Activity
     public void onFocusChange(View v, boolean hasFocus) {
         if (hasFocus) {
             showSuggestionFragment();
+            mSystemAppCheckBox.setVisibility(View.GONE);
             mSearchEditText.addTextChangedListener(this);
         } else {
+            mSystemAppCheckBox.setVisibility(View.VISIBLE);
             hideSuggestionFragment();
             mSearchEditText.removeTextChangedListener(this);
         }
+    }
+
+    @Override
+    public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
+        SharedPreferences.Editor editor =
+                PreferenceManager.getDefaultSharedPreferences(this).edit();
+        editor.putBoolean(PreferenceKeys.PREF_SYSTEM_APP, isChecked).apply();
     }
 }

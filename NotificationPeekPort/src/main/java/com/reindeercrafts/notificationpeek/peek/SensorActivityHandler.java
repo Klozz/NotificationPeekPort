@@ -111,7 +111,7 @@ public class SensorActivityHandler {
                     if (mHasInitialValues) {
                         float dX = Math.abs(mLastX - x);
                         float dY = Math.abs(mLastY - y);
-                        float dZ = Math.abs(mLastY - z);
+                        float dZ = Math.abs(mLastZ - z);
                         if (dX >= NOISE_THRESHOLD ||
                                 dY >= NOISE_THRESHOLD || dZ >= NOISE_THRESHOLD) {
                             if (mWaitingForMovement) {
@@ -328,17 +328,17 @@ public class SensorActivityHandler {
 
         public abstract void onTableModeChanged(boolean onTable);
 
-        public abstract void onScreenStateChaged(boolean screenOn);
+        public abstract void onScreenStateChanged(boolean screenOn);
     }
 
     public class ScreenReceiver extends BroadcastReceiver {
         @Override
         public void onReceive(Context context, Intent intent) {
             if (intent.getAction().equals(Intent.ACTION_SCREEN_OFF)) {
-                mCallback.onScreenStateChaged(false);
+                mCallback.onScreenStateChanged(false);
                 registerEventListeners();
             } else if (intent.getAction().equals(Intent.ACTION_SCREEN_ON)) {
-                mCallback.onScreenStateChaged(true);
+                mCallback.onScreenStateChanged(true);
                 unregisterEventListeners();
 
             } else if (intent.getAction().equals(ACTION_UPDATE_SENSOR_USE)) {
